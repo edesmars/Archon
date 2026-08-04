@@ -7,8 +7,9 @@ description: |
            questions about issues, CI failures, PR reviews, general exploration.
 
   DAG workflow that:
-  1. Classifies the issue (bug/feature/enhancement/etc)
-  2. Researches context (web research + codebase exploration via investigate/plan)
+  1. Classifies the issue (bug/feature/enhancement/etc) and decides if web research is needed
+  2. Researches context (web research only when the issue needs external API/architecture
+     lookup; codebase exploration via investigate/plan always runs)
   3. Routes to investigate (bugs) or plan (features) based on classification
   4. Implements the fix/feature with validation
   5. Creates a draft PR using the repo's PR template
@@ -108,6 +109,23 @@ nodes:
       | chore | "update deps", "upgrade", "maintenance", "CI/CD" |
       | documentation | "docs", "readme", "clarify", "examples" |
 
+      ## Web Research Need
+
+      Separately, decide whether external web research is required before implementing.
+      Set `needs_research` to "true" ONLY when the issue requires:
+      - Verifying a public/third-party API contract (endpoints, params, response shape,
+        auth flow) that isn't already documented or exercised elsewhere in this codebase
+      - Understanding an unfamiliar library/framework/service integration with no existing
+        usage pattern in the repo to copy from
+      - Resolving an architectural question where the correct approach isn't already
+        established by existing code conventions
+
+      Set it to "false" for routine work fully resolvable by reading the codebase — e.g.
+      unit/integration tests for existing code, bug fixes in code we already own, internal
+      refactors/enhancements, docs, chores, or anything the codebase already demonstrates
+      the pattern for. Default to "false" when in doubt; research is the exception, not
+      the rule.
+
       Provide reasoning for your classification.
     depends_on: [fetch-issue]
     model: small
@@ -120,9 +138,12 @@ nodes:
           enum: ["bug", "feature", "enhancement", "refactor", "chore", "documentation"]
         title:
           type: string
+        needs_research:
+          type: string
+          enum: ["true", "false"]
         reasoning:
           type: string
-      required: [issue_type, title, reasoning]
+      required: [issue_type, title, needs_research, reasoning]
 
   # ═══════════════════════════════════════════════════════════════
   # PHASE 2: RESEARCH (parallel with PR template fetch)
@@ -131,6 +152,7 @@ nodes:
   - id: web-research
     command: archon-web-research
     depends_on: [classify]
+    when: "$classify.output.needs_research == 'true'"
     context: fresh
 
   # ═══════════════════════════════════════════════════════════════
@@ -140,12 +162,14 @@ nodes:
   - id: investigate
     command: archon-investigate-issue
     depends_on: [classify, web-research]
+    trigger_rule: none_failed_min_one_success
     when: "$classify.output.issue_type == 'bug'"
     context: fresh
 
   - id: plan
     command: archon-create-plan
     depends_on: [classify, web-research]
+    trigger_rule: none_failed_min_one_success
     when: "$classify.output.issue_type != 'bug'"
     context: fresh
 
@@ -174,7 +198,6 @@ nodes:
     command: archon-fix-issue
     depends_on: [bridge-artifacts]
     context: fresh
-    model: large
 
   # ═══════════════════════════════════════════════════════════════
   # PHASE 5: VALIDATE
@@ -386,3 +409,4 @@ nodes:
     command: archon-issue-completion-report
     depends_on: [simplify]
     context: fresh
+    model: small

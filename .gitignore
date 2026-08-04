@@ -120,3 +120,6 @@ packages/server/.env
 skills-lock.json
 test-results/
 .archon/ralph/
+
+# Personal, local-only Claude instructions (never shared/committed)
+CLAUDE.local.md
