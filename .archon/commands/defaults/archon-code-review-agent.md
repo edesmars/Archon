@@ -50,11 +50,28 @@ cat CLAUDE.md
 
 Note all coding standards, patterns, and rules.
 
+### 1.5 Read Project Review Guidelines
+
+A project may ship reviewer-specific guidance that applies on top of
+`CLAUDE.md`. Read the file for THIS reviewer, if it exists:
+
+```bash
+cat .archon/review/code-review.md 2>/dev/null || echo "(no project-specific code-review guidelines)"
+```
+
+Treat anything found there as project-specific review criteria carrying the same
+weight as `CLAUDE.md` rules: check the diff against it and report violations as
+findings, citing the guideline you are applying.
+
+If the file is absent, review against `CLAUDE.md` and general standards alone.
+Its absence is not itself a finding, and you should not recommend creating it.
+
 **PHASE_1_CHECKPOINT:**
 - [ ] PR number identified
 - [ ] Scope loaded
 - [ ] Diff available
 - [ ] CLAUDE.md rules noted
+- [ ] Project review guidelines loaded (or confirmed absent)
 
 ---
 
