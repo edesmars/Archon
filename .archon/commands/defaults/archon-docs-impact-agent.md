@@ -51,10 +51,27 @@ ls -la .claude/agents/ 2>/dev/null || true
 ls -la .archon/commands/ 2>/dev/null || true
 ```
 
+### 1.5 Read Project Review Guidelines
+
+A project may ship reviewer-specific guidance that applies on top of
+`CLAUDE.md`. Read the file for THIS reviewer, if it exists:
+
+```bash
+cat .archon/review/docs-impact.md 2>/dev/null || echo "(no project-specific docs-impact guidelines)"
+```
+
+Treat anything found there as project-specific review criteria carrying the same
+weight as `CLAUDE.md` rules: check the diff against it and report violations as
+findings, citing the guideline you are applying.
+
+If the file is absent, review against `CLAUDE.md` and general standards alone.
+Its absence is not itself a finding, and you should not recommend creating it.
+
 **PHASE_1_CHECKPOINT:**
 - [ ] PR number identified
 - [ ] Changes understood
 - [ ] Current docs read
+- [ ] Project review guidelines loaded (or confirmed absent)
 
 ---
 

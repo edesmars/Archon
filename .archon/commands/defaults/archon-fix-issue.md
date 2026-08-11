@@ -142,10 +142,29 @@ cat {artifact-path}
 Run `/investigate-issue {number}` first to create the implementation plan.
 ```
 
+### 1.4 Read Project Conventions
+
+```bash
+cat CLAUDE.md 2>/dev/null || echo "(no CLAUDE.md in this repo)"
+```
+
+Note every coding standard, naming pattern, error-handling rule, and testing
+requirement that applies to this codebase, and follow them in the changes you
+make below.
+
+Read this explicitly rather than assuming it is already in your context.
+Providers differ in whether they auto-discover context files, and some suppress
+that discovery entirely — an unread `CLAUDE.md` is the common cause of a change
+that is correct but violates the project's conventions.
+
+If the repository has no `CLAUDE.md`, follow the conventions evident in the
+surrounding code instead.
+
 **PHASE_1_CHECKPOINT:**
 - [ ] Artifact found and loaded
 - [ ] Key sections parsed (files, steps, validation)
 - [ ] Issue number extracted (if applicable)
+- [ ] CLAUDE.md conventions read (or confirmed absent)
 
 ---
 
