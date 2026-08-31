@@ -80,6 +80,7 @@ export const TRANSIENT_PATTERNS = [
   'network error',
   'stream closed without yielding content', // empty provider stream (#2706): silent rejection or interruption, not a node defect
   'socket hang up',
+  'socket connection was closed', // undici fetch() dropped mid-stream (distinct wording from the Node http "socket hang up")
   'exited with code',
   'claude code crash',
 ];

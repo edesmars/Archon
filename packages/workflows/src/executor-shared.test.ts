@@ -915,6 +915,16 @@ describe('classifyError', () => {
     ).toBe('TRANSIENT');
   });
 
+  it('classifies an undici fetch() socket drop as TRANSIENT', () => {
+    expect(
+      classifyError(
+        new Error(
+          'The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()'
+        )
+      )
+    ).toBe('TRANSIENT');
+  });
+
   it('classifies Codex model-capacity errors as TRANSIENT — #2425', () => {
     expect(
       classifyError(new Error('Selected model is at capacity. Please try a different model.'))
