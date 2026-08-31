@@ -123,3 +123,9 @@ test-results/
 
 # Personal, local-only Claude instructions (never shared/committed)
 CLAUDE.local.md
+
+# Stray run logs from a mis-threaded logDir argument (see #2299) — never committed.
+main/
+
+# Personal per-run config overlays (workflow run --config) — never tracked
+.config.*.yaml

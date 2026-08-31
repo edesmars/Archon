@@ -206,7 +206,11 @@ Query parameters:
 
 When `cwd` is omitted, Archon returns bundled default workflows and any from `~/.archon/workflows/` (home-scoped). Project-specific workflows require either the `cwd` query param or a registered codebase, so the endpoint is useful on first launch before any project is registered.
 
-Returns `{ workflows: [...], errors?: [...] }`. The `errors` array contains any YAML parsing failures encountered during discovery.
+Returns `{ workflows: [...], recommended: [...], errors?: [...] }`.
+
+- `workflows[]` — each entry is `{ workflow, source, parseWarnings? }`. `parseWarnings` contains warning messages identifying the keys the engine silently dropped from that workflow's YAML, each with the node it was found on and what to write instead (see [Unknown keys](/guides/authoring-workflows/#unknown-keys-are-reported-not-rejected)); it is **omitted entirely** when the workflow is clean, so its presence alone is the signal.
+- `recommended[]` — repo-owner-curated workflow names from `.archon/config.yaml`, filtered to discovered names and kept in declared order. Empty when there is no project context.
+- `errors[]` — YAML parsing failures encountered during discovery. Unlike `parseWarnings`, these workflows did **not** load.
 
 #### Get a Workflow
 
@@ -287,6 +291,64 @@ curl -X POST http://localhost:3090/api/workflows/archon-assist/run \
   -F "files=@screenshot.png"
 ```
 
+**Supplying declared inputs.** A workflow that declares [`inputs:`](/guides/authoring-workflows/#running-a-workflow-that-declares-inputs) takes their values through an optional `inputs` map — a flat object of string values. Omit a name to take its declared `default:`.
+
+```bash
+# JSON: inputs is a nested object
+curl -X POST http://localhost:3090/api/workflows/review-block/run \
+  -H "Content-Type: application/json" \
+  -d '{"message": "review it", "conversationId": "conv-123",
+       "inputs": {"diff": "...", "style": "terse"}}'
+
+# multipart: form fields are strings, so the same map travels JSON-encoded
+curl -X POST http://localhost:3090/api/workflows/review-block/run \
+  -F "conversationId=conv-123" \
+  -F "message=review it" \
+  -F 'inputs={"diff":"...","style":"terse"}' \
+  -F "files=@context.md"
+```
+
+Values are validated against the workflow's declaration before any worktree, clone, or AI cost: a missing **required** input and an **undeclared** name are both refused up front, through the same contract a composing `with:` map goes through. `400` if `inputs` is not an object of strings (or, on multipart, not valid JSON). An empty object is the same as omitting the field.
+
+**Rebinding models for one run.** Optional `tiers` and `aliases` maps change only the named tier or existing `@alias` for this invocation. Every other binding keeps its normal user → repo → global → built-in value.
+
+```bash
+# JSON: only `large` changes
+curl -X POST http://localhost:3090/api/workflows/issue-to-pr/run \
+  -H "Content-Type: application/json" \
+  -d '{"message":"fix #2481","conversationId":"conv-123",
+       "tiers":{"large":"openai/gpt-5.6"},
+       "aliases":{"@reviewer":"codex/gpt-5.6-sol"}}'
+
+# multipart: each map is one JSON-encoded form field
+curl -X POST http://localhost:3090/api/workflows/issue-to-pr/run \
+  -F "conversationId=conv-123" \
+  -F "message=fix #2481" \
+  -F 'tiers={"large":"openai/gpt-5.6"}'
+```
+
+Tier keys are `small`, `medium`, and `large`; alias keys start with `@`. A model spec can name an Archon agent/model, a Pi vendor/model, an unqualified model under the binding's current provider, or another tier/alias preset. Literal model pins in the workflow remain unchanged. To replace all default tiers, author all three mappings explicitly. The run's `metadata.model_bindings` records the effective non-secret bindings for attribution and the sparse resolved overrides for reuse on resume.
+
+**Loading inline config for one run.** Optional `config` content uses the same sparse runtime keys as a CLI run config file. JSON sends it as an object; multipart sends the object JSON-encoded in one form field. Explicit `tiers` and `aliases` fields are the final model layer and replace only matching names from `config`.
+
+```bash
+# JSON content
+curl -X POST http://localhost:3090/api/workflows/issue-to-pr/run \
+  -H "Content-Type: application/json" \
+  -d '{"message":"fix #2482","conversationId":"conv-123",
+       "config":{"tiers":{"large":{"provider":"pi","model":"minimax/MiniMax-M3"}},
+                 "env":{"BENCH_MODE":"1"}},
+       "tiers":{"large":"openai/gpt-5.6"}}'
+
+# multipart content
+curl -X POST http://localhost:3090/api/workflows/issue-to-pr/run \
+  -F "conversationId=conv-123" \
+  -F "message=fix #2482" \
+  -F 'config={"docs":{"path":"handbook"},"workflows":{"quotaMaxAttempts":3}}'
+```
+
+Supported inline keys are `assistant` or `defaultAssistant`, `assistants`, `tiers`, `aliases`, `workflows`, `docs.path`, and `env`. Unknown or ineffective keys fail with `400` and name the key. `configPath` is always rejected: HTTP callers cannot ask the server to read a filesystem path. Run metadata stores sealed replay content plus redacted source/key attribution, and resume uses the original layer without accepting replacement content.
+
 #### List Run Artifacts
 
 ```bash
@@ -317,7 +379,7 @@ curl -X POST http://localhost:3090/api/workflows/runs/{runId}/reject \
   -d '{"reason": "Please add error handling first"}'
 ```
 
-**Sub-run child gates (#2121 Phase 2):** when a `workflow:` sub-run pauses at its own gate, its parent run pauses "blocked on child". Approve/reject the **child** run (its id is in the parent's block message) — the parent auto-resumes when the child completes. Calling approve/reject on the *parent's* id while it is blocked on a child returns **400** with a redirect to the child id. `abandon` on a parent cascade-cancels its non-terminal sub-run descendants; the response's `cascadeFailures` is non-zero if part of the tree could not be reached, and `blockedParentRunId` is set when the abandoned run was itself a child stranding a paused parent.
+**Sub-run child gates (#2121 Phase 2):** when a `workflow:` sub-run pauses at its own gate, its parent run pauses "blocked on child". Approve/reject the **child** run (its id is in the parent's block message) — the parent auto-resumes when the child completes. A child gate is the exception: it works for a 1:1 sub-run, but a child that pauses inside a `fan_out:` expansion **fails the node** instead — a parent has one approval slot and cannot hand it to N children, so gate before or after the fan-out node rather than inside a child of it. Calling approve/reject on the *parent's* id while it is blocked on a child returns **400** with a redirect to the child id. `abandon` on a parent cascade-cancels its non-terminal sub-run descendants; the response's `cascadeFailures` is non-zero if part of the tree could not be reached, and `blockedParentRunId` is set when the abandoned run was itself a child stranding a paused parent.
 
 ---
 

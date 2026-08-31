@@ -6,6 +6,7 @@ export type {
   NodeConfig,
   ProviderDefaults,
   ProviderDefaultsMap,
+  ProviderRunConfigParser,
   ProviderCapabilities,
   ProviderRegistration,
   ProviderInfo,
@@ -26,6 +27,7 @@ export {
   getAgentProvider,
   getRegistration,
   getProviderCapabilities,
+  parseProviderRunModel,
   getRegisteredProviders,
   getProviderInfoList,
   isRegisteredProvider,
@@ -35,7 +37,13 @@ export {
 } from './registry';
 
 // Error
-export { UnknownProviderError } from './errors';
+export { InvalidProviderRunConfigError, UnknownProviderError } from './errors';
+
+// The shared reasoning-depth ladder is deliberately NOT re-exported here. It is
+// reachable only as `@archon/providers/effort`, a leaf with zero SDK imports, so
+// a schema or other leaf file can derive from it without dragging in this barrel
+// — which re-exports `registry.ts` and every provider SDK. See EFFORT_LADDER in
+// ./shared/effort.ts.
 
 // Shared structured-output helpers (cross-provider; the dag-executor validates
 // every provider's output_format result against the declared schema).
@@ -50,7 +58,12 @@ export { ClaudeProvider } from './claude/provider';
 export { CodexProvider } from './codex/provider';
 
 // Config parsers
-export { parseClaudeConfig, type ClaudeProviderDefaults } from './claude/config';
+export {
+  parseClaudeConfig,
+  parseClaudeSettingSources,
+  type ClaudeProviderDefaults,
+  type ParsedSettingSources,
+} from './claude/config';
 export { parseCodexConfig, type CodexProviderDefaults } from './codex/config';
 
 // Utilities (needed by consumers)
@@ -65,7 +78,7 @@ export {
 export { resolveClaudeBinaryPath, fileExists as claudeFileExists } from './claude/binary-resolver';
 
 // Skills resolution
-export { skillSearchRoots } from './shared/skills';
+export { claudeSkillSearchRoots, findInstalledSkillNames, skillSearchRoots } from './shared/skills';
 
 // Community providers
 export {

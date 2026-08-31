@@ -75,9 +75,16 @@ The file `.archon/scripts/fetch-github-pages.ts` is loaded and executed with
 4. **Capture.** `stdout` (with the trailing newline stripped) becomes
    `$nodeId.output`. On a successful run, `stderr` is logged as a warning and
    posted to the conversation but does **not** fail the node. A non-zero exit
-   code fails the node; on failure, `stderr` is the diagnostic surfaced in the
-   error message (`Script node 'X' failed [exit N]: <stderr>`) — the script
-   body is never echoed back to users.
+   code fails the node; on failure, tails of both streams are surfaced in the
+   error message (`Script node 'X' failed [exit N]: [stderr] ... [stdout] ...`),
+   sharing a ~2 KB diagnostic budget — stderr keeps priority, stdout gets the
+   remainder, and a label prefixes each stream only when both are populated.
+   With stderr empty, the stdout tail becomes the diagnostic. The script body
+   is never echoed back to users.
+5. **Retain.** Regardless of outcome, capped and credential-redacted tails of
+   both streams are written to the run transcript as an `exec_output` row — see
+   [Retained subprocess evidence](/guides/authoring-workflows#retained-subprocess-evidence).
+   That retention is evidence only; it never caps `$nodeId.output`.
 
 ## YAML Schema
 
@@ -88,7 +95,8 @@ The file `.archon/scripts/fetch-github-pages.ts` is loaded and executed with
   deps: ["httpx", "pydantic>=2"]               # optional, uv-only (see below)
   timeout: 60000                               # optional ms, default 120000
   depends_on: [upstream]                       # optional
-  when: "$upstream.output != ''"               # optional
+  when: "$upstream.output != '[]'"             # optional (upstream is a bash/script node;
+                                               #  an AI producer needs output_format + a field)
   trigger_rule: all_success                    # optional (default)
   retry:                                       # optional; same shape as bash/AI nodes
     max_attempts: 3
@@ -99,7 +107,7 @@ The file `.archon/scripts/fetch-github-pages.ts` is loaded and executed with
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `script` | string | Yes | Inline code, or the basename (no extension) of a file in `.archon/scripts/` or `~/.archon/scripts/` |
+| `script` | string | Yes | Inline code, or a named script in the owning workflow's `scripts/` directory (packaged workflows) or shared script directories (legacy workflows) |
 | `runtime` | `'bun'` \| `'uv'` | Yes | Which runtime executes the script. Must match the file extension for named scripts |
 | `deps` | string[] | No | Python dependencies to install for this run. **uv only** — ignored with a warning for `bun` |
 | `timeout` | number (ms) | No | Hard kill after this many milliseconds. Default: `120000` (2 min) |
@@ -130,12 +138,14 @@ identifier, add a trailing comment or newline to force inline mode.
 
 ### Named Script Resolution
 
-Named scripts are discovered from, in precedence order:
+Named scripts use one of two resolution modes:
 
-1. `<repoRoot>/.archon/scripts/` — repo-local
-2. `~/.archon/scripts/` — home-scoped (shared across every repo)
+- **Packaged workflow:** resolve only from the owning workflow's `scripts/` directory. Bundled package scripts use the same ownership rule and are embedded for binary distribution.
+- **Legacy workflow:** resolve shared scripts from `<repoRoot>/.archon/scripts/`, then `~/.archon/scripts/`.
 
-Each directory is walked one subfolder deep (e.g. `.archon/scripts/triage/foo.ts`
+Workflow-local lookup is scoped to the workflow that declared the node, including through `include:` expansion. Authors still write only the bare name (`script: publish`); the ownership key is internal.
+
+Each shared scripts directory is walked one subfolder deep (e.g. `.archon/scripts/triage/foo.ts`
 resolves as `foo`). Deeper nesting is ignored. On a same-name collision the
 repo-local entry wins silently — see [Global Workflows](/guides/global-workflows/)
 for the shared precedence rules.
@@ -249,10 +259,10 @@ for the full story.
 
 `archon validate workflows <name>` checks script nodes for:
 
-- **Script file exists** — for named scripts, the basename must exist in
-  `.archon/scripts/` or `~/.archon/scripts/` with a matching extension for
-  the declared runtime. Missing files fail validation with a hint showing
-  the expected path.
+- **Script file exists** — for named scripts, the basename must exist in the
+  owning workflow's `scripts/` directory or the legacy shared search path, with
+  a matching extension for the declared runtime. Missing files fail validation
+  with a hint showing the expected path.
 - **Runtime available on PATH** — `bun` or `uv` must be installed. Missing
   runtimes emit a warning with the official install command:
   - `curl -fsSL https://bun.sh/install | bash`
