@@ -42,10 +42,27 @@ Focus on:
 - Comments near modified code
 - JSDoc/docstrings added or changed
 
+### 1.4 Read Project Review Guidelines
+
+A project may ship reviewer-specific guidance that applies on top of
+`CLAUDE.md`. Read the file for THIS reviewer, if it exists:
+
+```bash
+cat .archon/review/comment-quality.md 2>/dev/null || echo "(no project-specific comment-quality guidelines)"
+```
+
+Treat anything found there as project-specific review criteria carrying the same
+weight as `CLAUDE.md` rules: check the diff against it and report violations as
+findings, citing the guideline you are applying.
+
+If the file is absent, review against `CLAUDE.md` and general standards alone.
+Its absence is not itself a finding, and you should not recommend creating it.
+
 **PHASE_1_CHECKPOINT:**
 - [ ] PR number identified
 - [ ] Changed files with comments identified
 - [ ] Diff available
+- [ ] Project review guidelines loaded (or confirmed absent)
 
 ---
 
